@@ -26,6 +26,7 @@ function buildMember(overrides: Partial<PublicMember> = {}): PublicMember {
     uid: "u1",
     memberType: "human",
     displayName: "Test User",
+    photoURL: null,
     visibility: { isPublic: true },
     ...overrides,
   } as PublicMember;
@@ -67,6 +68,25 @@ describe("GET /api/members/public", () => {
 
   afterEach(() => {
     consoleErrorSpy.mockRestore();
+  });
+
+  it("strips account emails from a stored snapshot before responding", async () => {
+    const member = buildMember({
+      email: "private@example.com",
+      additionalEmails: [{ email: "alias@example.com", verified: true }],
+    } as Partial<PublicMember>);
+    mockDbWithSnapshot({
+      members: [member],
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    const res = await GET();
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.members[0].email).toBeUndefined();
+    expect(JSON.stringify(body.members)).not.toContain("private@example.com");
+    expect(JSON.stringify(body.members)).not.toContain("alias@example.com");
   });
 
   it("returns a fresh snapshot without rebuilding", async () => {

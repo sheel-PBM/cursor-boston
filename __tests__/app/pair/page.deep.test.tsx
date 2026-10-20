@@ -58,6 +58,21 @@ function installFetchMock(
   const { requests = [], profilePostOk = true } = overrides;
   global.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    if (url.includes("/api/members/public")) {
+      return {
+        ok: true,
+        json: async () => ({
+          members: [
+            {
+              uid: PARTNER_UID,
+              displayName: "Partner Dev",
+              photoURL: null,
+              memberType: "human",
+            },
+          ],
+        }),
+      };
+    }
     const method = (init?.method || "GET").toUpperCase();
 
     if (url.includes("/api/pair/request") && method === "GET") {

@@ -8,7 +8,12 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import type { PublicMember, MemberFilters, SortOption } from "@/types/members";
+import {
+  memberCreatedAtDate,
+  type PublicMember,
+  type MemberFilters,
+  type SortOption,
+} from "@/types/members";
 
 function revivePublicMember(raw: PublicMember): PublicMember {
   const c = raw.createdAt as unknown;
@@ -109,15 +114,15 @@ export function useMembers(initialSearch: string = "") {
     switch (sortBy) {
       case "newest":
         result.sort((a, b) => {
-          const dateA = a.createdAt?.toDate?.()?.getTime() || 0;
-          const dateB = b.createdAt?.toDate?.()?.getTime() || 0;
+          const dateA = memberCreatedAtDate(a.createdAt)?.getTime() || 0;
+          const dateB = memberCreatedAtDate(b.createdAt)?.getTime() || 0;
           return dateB - dateA;
         });
         break;
       case "oldest":
         result.sort((a, b) => {
-          const dateA = a.createdAt?.toDate?.()?.getTime() || 0;
-          const dateB = b.createdAt?.toDate?.()?.getTime() || 0;
+          const dateA = memberCreatedAtDate(a.createdAt)?.getTime() || 0;
+          const dateB = memberCreatedAtDate(b.createdAt)?.getTime() || 0;
           return dateA - dateB;
         });
         break;

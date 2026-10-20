@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sendEmail } from "@/lib/mailgun";
 import { parseRequestBody } from "@/lib/api-response";
 import { notifyAdminContract } from "@/lib/api-schemas/notify-admin";
+import { enforceNotifyAdminRateLimit } from "@/lib/notify-admin-guard";
 
 function escapeHtml(text: string | undefined): string {
   if (!text) return "";
@@ -24,6 +25,9 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "hello@cursorboston.com";
 
 export async function POST(request: NextRequest) {
   try {
+    const limited = await enforceNotifyAdminRateLimit(request, "event");
+    if (limited) return limited;
+
     const bodyOrError = await parseRequestBody(request);
     if (bodyOrError instanceof NextResponse) return bodyOrError;
     const parsed = notifyAdminContract.event.body.safeParse(bodyOrError);

@@ -113,4 +113,58 @@ To prevent security issues:
 - Server-side secrets (Discord client secret) must remain private
 - Email addresses in code are contact info, not secrets
 
+## Audit — 2026-10-20
+
+Manual pass on `develop` (fork `sheel-PBM/cursor-boston`). Findings below were checked against the code and tests before they were treated as real. Theoretical notes that did not produce a working cross-user result are listed under "Checked and not confirmed."
+
+### Tools
+
+| Tool | Result |
+| --- | --- |
+| Claude Security (`claude-security`) | Not run. No Claude Code install and no Anthropic login in this environment. |
+| Codex Security (`cs scan`) | Not run. Global install of `@openai/codex-security` failed with `EACCES` on `/usr/lib/node_modules`, and there is no OpenAI login. |
+| Cloudflare security-audit skill | Followed by hand from the published skill (recon, coverage hunt, fresh recheck of each candidate, write-up). The `npx skills add` installer was not used. |
+| Google Mantis | Not run. It needs `gcloud auth application-default login` and an LLM backend; that setup was skipped. |
+| `npm audit` | Ran against the production tree (`npm audit --omit=dev`) before and after the dependency pins. |
+| `pip-audit` | Not applicable. There is no Python application dependency set; the `.py` files under event folders are submissions. |
+
+### Confirmed
+
+**High — public member records included account email.** `GET /api/members/public` built its snapshot by copying the whole user document. That copy included `email` and `additionalEmails` even when `visibility.showEmail` was off. Firestore rules also let any client read `users/{userId}` when `visibility.isPublic` was true, and Firestore cannot hide individual fields. A visitor could read the email of anyone who had turned on a public profile, including through the unauthenticated directory API. The directory now keeps an allowlist (`lib/public-member.ts`) on snapshot write and again on API read. Client reads of `users/{userId}` are owner-only. Pair and mentorship screens load display names from the sanitized directory.
+
+**High — `emailLookup` was listable by any signed-in user.** Document ids are email addresses and the values include a uid. App code only reads this collection with the Admin SDK. Client read and write are now denied.
+
+**High — `POST /api/notify-admin/cfp` was an open mail path.** The route did not check a Firebase token and emailed both the admin and whatever address was in the body. A caller could send mail from the community domain to an address they do not own. The route now requires a signed-in user, sends the confirmation only to an address on that account (token email, profile email, or a verified `additionalEmails` entry), still notifies the admin, and rate-limits the caller. The CFP page sends the ID token with the notify request.
+
+**Medium — talk and event notify routes had no rate limit.** `POST /api/notify-admin/event` and `POST /api/notify-admin/talk` stay public (they back public forms and only mail `ADMIN_EMAIL`), but they could be called without a limit and burn the Mailgun quota. Both now share an 8-requests-per-15-minutes limit per client.
+
+**Critical (dependency) — Next.js 16.2.6.** Production `npm audit` matched the installed Next.js line to advisories fixed in 16.3.8 (middleware/proxy bypass, server-action issues, cache confusion, image optimizer). `next` and the matching `@next/*` packages are pinned to `16.3.8`. After the pin and the overrides below, production audit reports **0 critical**.
+
+Other patched transitive packages (override, already the project’s style): `form-data` 4.0.6, `axios` ^1.20.0, `postcss` ^8.5.31, `hono` ^4.13.13, `tar` ^7.5.22, `undici` ^6.29.1, `proxy-addr` ^2.0.8, `websocket-driver` ^0.7.5, `protobufjs` ^7.6.6, `@fastify/busboy` ^3.2.3, `http-cache-semantics` ^4.3.0, `ip-address` ^10.7.4.
+
+### Left on purpose
+
+Production `npm audit --omit=dev` still reports **3 high** and **7 moderate**:
+
+- `@grpc/grpc-js` — firebase client and firebase-admin/google-gax pull different lines. One override would force the client onto the admin line.
+- `brace-expansion` — majors 1, 2, and 5 are all in the tree; a single override cannot satisfy every parent.
+- `js-yaml` — `gray-matter` uses 3.14.2 while other packages use 4.x. A blanket override would downgrade the 4.x copies.
+
+These are advisory hits in dependencies, not a confirmed request path that exploits them. `npm audit fix --force` was not used.
+
+Firestore rule edits in this change are source until they are deployed. The GitHub "Deploy Firestore rules + indexes" workflow has been failing with a 403 since May 2026, so a maintainer still needs `firebase deploy --only firestore:rules,firestore:indexes` (or a fixed workflow) before the owner-only user read and the `emailLookup` deny are live. The directory API sanitizer takes effect on the next app deploy and does not wait for that rules deploy.
+
+Pair, mentorship, and session display names now come from the public members snapshot (rebuilt on a cron). A brand-new public profile can show a blank name until the next snapshot. Emails stop appearing on the directory response immediately, including for a snapshot that was stored before this change.
+
+### Checked and not confirmed
+
+- No live secret in the tree or in git history. Hits for private-key blocks, `sk_live_`, and `AIza` are prompt text, logger tests, or redaction code. Demo env files use placeholder values. Nothing here needs a rotation based on this audit.
+- No Supabase project and no service-role key. Firebase web config is public by design.
+- No Stripe webhook. The GitHub webhook checks HMAC-SHA256 with a timing-safe compare and rejects a missing secret.
+- OAuth return paths must start with `/` and must not start with `//`.
+- `dangerouslySetInnerHTML` uses are JSON-LD built with `JSON.stringify`, not raw member HTML.
+- `POST /api/auth/resolve-email` can tell whether an email has an account. It is already rate-limited and was left as-is.
+- Content-Security-Policy still allows `'unsafe-inline'` scripts. No XSS sink was shown that turns that into a confirmed issue.
+- Login and signup go through the Firebase client SDK. The app’s send-verification route is authenticated and rate-limited. There is no separate app login route to wrap.
+
 Thank you for helping keep Cursor Boston secure!

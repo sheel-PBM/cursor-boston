@@ -36,12 +36,13 @@ service cloud.firestore {
       allow delete: if false;
     }
     
-    // Users collection - users can read/write their own data
-    // Anyone can read public profiles, users can read their own full profile
+    // Users collection - owner read/write only.
+    // Public directory cards go through /api/members/public, which copies an
+    // allowlist. A client read of this document would also return email and
+    // additionalEmails, and Firestore rules cannot hide individual fields.
     // SECURITY: Field-level validation prevents modification of sensitive fields
     match /users/{userId} {
-      allow read: if resource.data.visibility.isPublic == true 
-                  || (request.auth != null && request.auth.uid == userId);
+      allow read: if request.auth != null && request.auth.uid == userId;
       allow create: if request.auth != null
                     && request.auth.uid == userId
                     && !request.resource.data.keys().hasAny(['cursor', 'earnedBadgeIds', 'pullRequestsCount', 'hackASprint2026ShowcaseBadge', 'hackASprint2026ShowcaseAwards', 'hackASprint2026Unlocked', 'hackASprint2026UnlockedAt', 'hackASprint2026CreditEmailSentAt']);
@@ -57,11 +58,12 @@ service cloud.firestore {
       }
     }
     
-    // Email lookup collection - maps emails to user UIDs for multi-email login
-    // SECURITY: Restricted to authenticated users to prevent email enumeration
+    // Email lookup collection - maps emails to user UIDs for multi-email login.
+    // Document ids are the email addresses. Every read and write is Admin SDK
+    // (resolve-email, verification). Client access would let any signed-in
+    // user list the whole directory.
     match /emailLookup/{email} {
-      allow read: if request.auth != null;
-      allow write: if false; // Only server-side writes via Admin SDK
+      allow read, write: if false;
     }
     
     // Email verifications - server-side only for security

@@ -12,8 +12,8 @@ import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import Link from "next/link";
 import Avatar from "@/components/Avatar";
-import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { lookupPublicDisplayNames } from "@/lib/public-profile-lookup";
 import { getMentorshipProfile } from "@/lib/mentorship/data";
 import { SectionHelp } from "@/components/SectionHelp";
 import type {
@@ -74,20 +74,9 @@ export default function MentorshipPage() {
         const topMatches: MentorshipMatchScore[] = data.matches;
         setMatches(topMatches);
 
-        const profileMap: Record<string, PublicUser> = {};
-        await Promise.all(
-          topMatches.map(async (m) => {
-            if (!db) return;
-            const snap = await getDoc(doc(db, "users", m.userId));
-            if (snap.exists()) {
-              const d = snap.data();
-              profileMap[m.userId] = { uid: m.userId, displayName: d.displayName || null, photoURL: d.photoURL || null };
-            } else {
-              profileMap[m.userId] = { uid: m.userId, displayName: null, photoURL: null };
-            }
-          })
+        setUserProfiles(
+          await lookupPublicDisplayNames(topMatches.map((m) => m.userId))
         );
-        setUserProfiles(profileMap);
       } catch (error) {
         console.error("Error fetching mentorship matches:", error);
       }

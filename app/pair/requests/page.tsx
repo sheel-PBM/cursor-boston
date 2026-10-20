@@ -13,8 +13,8 @@ import Link from "next/link";
 import Avatar from "@/components/Avatar";
 import { useRouter } from "next/navigation";
 import type { PairRequest, SessionType } from "@/lib/pair-programming/types";
-import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { lookupPublicDisplayNames } from "@/lib/public-profile-lookup";
 
 interface PublicUser {
   uid: string;
@@ -65,25 +65,7 @@ export default function PairRequestsPage() {
         ];
         // Cap user profile lookups to avoid unbounded Firestore reads.
         const uniqueIds = [...new Set(allUserIds)].slice(0, 50);
-        const profilePromises = uniqueIds.map(async (uid: string) => {
-          if (!db) return { uid, displayName: null, photoURL: null };
-          const userDoc = await getDoc(doc(db, "users", uid));
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            return {
-              uid,
-              displayName: data.displayName || null,
-              photoURL: data.photoURL || null,
-            };
-          }
-          return { uid, displayName: null, photoURL: null };
-        });
-        const profiles = await Promise.all(profilePromises);
-        const profileMap: Record<string, PublicUser> = {};
-        profiles.forEach((p) => {
-          profileMap[p.uid] = p;
-        });
-        setUserProfiles(profileMap);
+        setUserProfiles(await lookupPublicDisplayNames(uniqueIds));
       } catch (error) {
         console.error("Error fetching requests:", error);
       } finally {

@@ -6,7 +6,7 @@
  */
 
 import Avatar from "@/components/Avatar";
-import type { PublicMember } from "@/types/members";
+import { memberCreatedAtDate, type PublicMember } from "@/types/members";
 import { DiscordIcon, GitHubIcon } from "@/components/icons";
 import { BADGE_DEFINITIONS } from "@/lib/badges/definitions";
 import { evaluateBadgeEligibility } from "@/lib/badges/eligibility";
@@ -24,6 +24,9 @@ interface MemberCardProps {
 
 export function MemberCard({ member }: MemberCardProps) {
   const v = member.visibility;
+  const memberSince = v?.showMemberSince
+    ? memberCreatedAtDate(member.createdAt)
+    : null;
   const isAgent = member.memberType === "agent";
   const badgeInput = {
     ...getBaseBadgeEligibilityInput({
@@ -310,10 +313,10 @@ export function MemberCard({ member }: MemberCardProps) {
             </svg>
           </a>
         )}
-        {v?.showMemberSince && member.createdAt && typeof member.createdAt.toDate === "function" && (
+        {memberSince && (
           <span className="text-neutral-400 text-xs ml-auto">
             Member since{" "}
-            {member.createdAt.toDate().toLocaleDateString("en-US", {
+            {memberSince.toLocaleDateString("en-US", {
               month: "short",
               year: "numeric",
             })}
