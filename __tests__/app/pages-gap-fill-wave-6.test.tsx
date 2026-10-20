@@ -394,6 +394,24 @@ function installSignedInFetch(overrides: Record<string, unknown> = {}) {
     const url = String(input);
     const method = init?.method ?? "GET";
 
+    if (url.includes("/api/members/public")) {
+      return jsonResponse({
+        members: [
+          {
+            uid: PARTNER_UID,
+            displayName: "Partner Dev",
+            photoURL: null,
+            memberType: "human",
+          },
+          {
+            uid: MATCH_UID,
+            displayName: "Mentor Alex",
+            photoURL: null,
+            memberType: "human",
+          },
+        ],
+      });
+    }
     if (url.includes("/api/mentorship/matches")) {
       return jsonResponse({
         success: true,

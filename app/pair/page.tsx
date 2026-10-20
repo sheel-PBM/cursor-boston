@@ -21,8 +21,8 @@ import type {
 import Avatar from "@/components/Avatar";
 import { getPairProfile, getAllActiveProfiles } from "@/lib/pair-programming/data";
 import { getTopMatches } from "@/lib/pair-programming/matching";
-import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { lookupPublicDisplayNames } from "@/lib/public-profile-lookup";
 import { NeedsWorkBanner } from "@/components/NeedsWorkBanner";
 import { SectionHelp } from "@/components/SectionHelp";
 
@@ -74,27 +74,8 @@ export default function PairProgrammingPage() {
         const topMatches = await getTopMatches(profile, allProfiles, 20);
         setMatches(topMatches);
 
-        // Fetch user profiles for display names/photos
         const userIds = topMatches.map((m) => m.userId);
-        const profilePromises = userIds.map(async (uid) => {
-          if (!db) return { uid, displayName: null, photoURL: null };
-          const userDoc = await getDoc(doc(db, "users", uid));
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            return {
-              uid,
-              displayName: data.displayName || null,
-              photoURL: data.photoURL || null,
-            };
-          }
-          return { uid, displayName: null, photoURL: null };
-        });
-        const profiles = await Promise.all(profilePromises);
-        const profileMap: Record<string, PublicUser> = {};
-        profiles.forEach((p) => {
-          profileMap[p.uid] = p;
-        });
-        setUserProfiles(profileMap);
+        setUserProfiles(await lookupPublicDisplayNames(userIds));
       } catch (error) {
         console.error("Error fetching matches:", error);
       }

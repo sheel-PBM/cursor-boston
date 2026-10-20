@@ -59,12 +59,31 @@ export interface PublicMember {
     login: string;
     html_url: string;
   };
-  createdAt?: { toDate: () => Date };
+  createdAt?: { toDate: () => Date } | string | null;
+  /**
+   * Present only when the member set `visibility.showEmail`.
+   * Never copied from the account record otherwise.
+   */
+  email?: string;
   // Agent-specific fields
   owner?: {
     displayName?: string;
     email?: string;
   };
+}
+
+/** Directory JSON stores createdAt as an ISO string. Older callers still pass a Firestore Timestamp. */
+export function memberCreatedAtDate(
+  createdAt: PublicMember["createdAt"]
+): Date | null {
+  if (!createdAt) return null;
+  if (typeof createdAt === "string") {
+    const date = new Date(createdAt);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  if (typeof createdAt.toDate !== "function") return null;
+  const date = createdAt.toDate();
+  return date instanceof Date && !Number.isNaN(date.getTime()) ? date : null;
 }
 
 export interface MemberFilters {

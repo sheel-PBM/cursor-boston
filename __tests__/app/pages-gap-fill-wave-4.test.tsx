@@ -372,6 +372,24 @@ function installSignedOutFetch() {
 function installSignedInFetch() {
   global.fetch = jest.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
+    if (url.includes("/api/members/public")) {
+      return jsonResponse({
+        members: [
+          {
+            uid: PARTNER_UID,
+            displayName: "Partner Dev",
+            photoURL: "https://example.com/avatar.png",
+            memberType: "human",
+          },
+          {
+            uid: "match-mentor-1",
+            displayName: "Mentor Alex",
+            photoURL: null,
+            memberType: "human",
+          },
+        ],
+      });
+    }
     if (url.includes("/api/mentorship/matches")) {
       return jsonResponse({
         success: true,

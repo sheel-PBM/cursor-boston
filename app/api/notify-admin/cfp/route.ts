@@ -9,6 +9,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { sendEmail } from "@/lib/mailgun";
 import { parseRequestBody } from "@/lib/api-response";
 import { notifyAdminContract } from "@/lib/api-schemas/notify-admin";
+import { getVerifiedUser } from "@/lib/server-auth";
+import { getAdminDb } from "@/lib/firebase-admin";
+import {
+  enforceNotifyAdminRateLimit,
+  ownedEmails,
+} from "@/lib/notify-admin-guard";
 
 function escapeHtml(text: string | undefined): string {
   if (!text) return "";
@@ -24,6 +30,19 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "hello@cursorboston.com";
 
 export async function POST(request: NextRequest) {
   try {
+    const limited = await enforceNotifyAdminRateLimit(request, "cfp");
+    if (limited) return limited;
+
+    let user;
+    try {
+      user = await getVerifiedUser(request);
+    } catch {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const bodyOrError = await parseRequestBody(request);
     if (bodyOrError instanceof NextResponse) return bodyOrError;
     const parsed = notifyAdminContract.cfp.body.safeParse(bodyOrError);
@@ -34,8 +53,22 @@ export async function POST(request: NextRequest) {
       );
     }
     const { name, email, school, department, advisor, thesisTitle, abstract, userId } = parsed.data;
+    if (userId && userId !== user.uid) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-    await Promise.all([
+    const normalizedEmail = email.trim().toLowerCase();
+    let profile: Record<string, unknown> | null = null;
+    const db = getAdminDb();
+    if (db) {
+      const snap = await db.collection("users").doc(user.uid).get();
+      const data = snap.data();
+      profile = data && typeof data === "object" ? (data as Record<string, unknown>) : null;
+    }
+    const allowed = ownedEmails({ tokenEmail: user.email, profile });
+    const confirmationTo = allowed.has(normalizedEmail) ? normalizedEmail : null;
+
+    const sends = [
       sendEmail({
         to: ADMIN_EMAIL,
         subject: `CFP Submission: ${escapeHtml(thesisTitle)}`,
@@ -53,22 +86,27 @@ export async function POST(request: NextRequest) {
         </ul>
         <h3>Abstract</h3>
         <p>${escapeHtml(abstract)}</p>
-        <hr><p><small>User ID: ${escapeHtml(userId)}</small></p>
+        <hr><p><small>User ID: ${escapeHtml(user.uid)}</small></p>
       `,
       }),
-      sendEmail({
-        to: email,
-        subject: `CFP Submission Received: ${escapeHtml(thesisTitle)}`,
-        text: `Hi ${escapeHtml(name)},\n\nWe've received your submission to the Cursor Boston Graduate Student Conference "What is AI?"\n\nThesis Title: ${escapeHtml(thesisTitle)}\n\nYou can edit your submission until May 1, 2026. We'll notify you at this email by June 1, 2026.\n\n— Cursor Boston`,
-        html: `
+    ];
+    if (confirmationTo) {
+      sends.push(
+        sendEmail({
+          to: confirmationTo,
+          subject: `CFP Submission Received: ${escapeHtml(thesisTitle)}`,
+          text: `Hi ${escapeHtml(name)},\n\nWe've received your submission to the Cursor Boston Graduate Student Conference "What is AI?"\n\nThesis Title: ${escapeHtml(thesisTitle)}\n\nYou can edit your submission until May 1, 2026. We'll notify you at this email by June 1, 2026.\n\n— Cursor Boston`,
+          html: `
         <p>Hi ${escapeHtml(name)},</p>
         <p>We've received your submission to the Cursor Boston Graduate Student Conference "What is AI?"</p>
         <p><strong>Thesis Title:</strong> ${escapeHtml(thesisTitle)}</p>
         <p>You can edit your submission until May 1, 2026. We'll notify you at this email by June 1, 2026.</p>
         <p>— Cursor Boston</p>
       `,
-      }),
-    ]);
+        })
+      );
+    }
+    await Promise.all(sends);
 
     return NextResponse.json({ success: true });
   } catch (error) {

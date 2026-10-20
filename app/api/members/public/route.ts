@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { MEMBERS_SNAPSHOT_CACHE_TTL_MS } from "@/lib/members-public-snapshot";
 import type { PublicMember } from "@/types/members";
+import { sanitizePublicMember } from "@/lib/public-member";
 
 // @contracts: membersContract.publicList (lib/api-schemas/members.ts)
 
@@ -79,8 +80,13 @@ export async function GET() {
       headers["X-Members-Snapshot-Stale"] = "true";
     }
 
+    const safeMembers = members.flatMap((member) => {
+      const safe = sanitizePublicMember(member);
+      return safe ? [safe] : [];
+    });
+
     return NextResponse.json(
-      { members },
+      { members: safeMembers },
       { headers }
     );
   } catch (e) {

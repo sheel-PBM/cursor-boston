@@ -69,7 +69,14 @@ describe("GET /api/members/public", () => {
 
     const res = await GET();
     const body = await res.json();
-    expect(body.members).toEqual([{ uid: "u1", displayName: "Alice" }]);
+    expect(body.members).toEqual([
+      {
+        uid: "u1",
+        displayName: "Alice",
+        memberType: "human",
+        photoURL: null,
+      },
+    ]);
     expect(mockRebuild).not.toHaveBeenCalled();
   });
 
@@ -83,7 +90,16 @@ describe("GET /api/members/public", () => {
     });
 
     const res = await GET();
-    await expect(res.json()).resolves.toEqual({ members: [{ uid: "stale" }] });
+    await expect(res.json()).resolves.toEqual({
+      members: [
+        {
+          uid: "stale",
+          displayName: null,
+          memberType: "human",
+          photoURL: null,
+        },
+      ],
+    });
     expect(res.headers.get("X-Members-Snapshot-Stale")).toBe("true");
     expect(mockRebuild).not.toHaveBeenCalled();
   });

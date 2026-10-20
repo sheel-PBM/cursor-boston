@@ -6,7 +6,7 @@
  */
 
 import { doc, setDoc, getDoc, serverTimestamp, Timestamp } from "firebase/firestore";
-import { db } from "./firebase";
+import { auth, db } from "./firebase";
 import { sanitizeText, sanitizeName } from "./sanitize";
 
 const ABSTRACT_MIN_WORDS = 1500;
@@ -143,9 +143,13 @@ export async function submitCfpProposal(
   await setDoc(docRef, payload, { merge: true });
 
   try {
+    const idToken = await auth?.currentUser?.getIdToken();
     await fetch("/api/notify-admin/cfp", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      },
       body: JSON.stringify({ ...sanitized, userId }),
     });
   } catch {

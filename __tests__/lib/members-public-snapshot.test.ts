@@ -142,8 +142,8 @@ describe("lib/members-public-snapshot", () => {
     const out = await computePublicMembersSnapshot(db);
     expect((out[0] as Record<string, unknown>).owner).toEqual({
       displayName: "Carol",
-      email: "carol@example.com",
     });
+    expect(JSON.stringify(out[0])).not.toContain("carol@example.com");
   });
 
   it("falls back to photoURL=null when agent has no avatarUrl", async () => {
@@ -206,14 +206,18 @@ describe("lib/members-public-snapshot", () => {
     expect(out[0]?.createdAt).toBeNull();
   });
 
-  it("recursively serializes nested Timestamps inside the visibility blob", async () => {
+  it("drops account emails and unknown visibility fields from public rows", async () => {
     const { db } = buildFakeDb(
       [
         doc("u-nest", {
           displayName: "Nest",
+          email: "nest@example.com",
+          additionalEmails: [{ email: "other@example.com", verified: true }],
+          provider: "google",
           createdAt: tsLike("2026-05-01T00:00:00.000Z"),
           visibility: {
             isPublic: true,
+            showBio: true,
             verifiedAt: tsLike("2026-04-01T00:00:00.000Z"),
             tags: ["a", "b"],
           },
@@ -222,9 +226,32 @@ describe("lib/members-public-snapshot", () => {
       [],
     );
     const out = await computePublicMembersSnapshot(db);
-    const v = (out[0] as Record<string, unknown>).visibility as Record<string, unknown>;
-    expect(v.verifiedAt).toBe("2026-04-01T00:00:00.000Z");
-    expect(v.tags).toEqual(["a", "b"]);
+    const row = out[0] as Record<string, unknown>;
+    const v = row.visibility as Record<string, unknown>;
+    expect(v.isPublic).toBe(true);
+    expect(v.showBio).toBe(true);
+    expect(v.verifiedAt).toBeUndefined();
+    expect(v.tags).toBeUndefined();
+    expect(row.email).toBeUndefined();
+    expect(row.additionalEmails).toBeUndefined();
+    expect(row.provider).toBeUndefined();
+    expect(JSON.stringify(row)).not.toContain("nest@example.com");
+  });
+
+  it("keeps email when the member opted in with showEmail", async () => {
+    const { db } = buildFakeDb(
+      [
+        doc("u-mail", {
+          displayName: "Public Mail",
+          email: "public@example.com",
+          createdAt: tsLike("2026-05-01T00:00:00.000Z"),
+          visibility: { isPublic: true, showEmail: true },
+        }),
+      ],
+      [],
+    );
+    const out = await computePublicMembersSnapshot(db);
+    expect(out[0]?.email).toBe("public@example.com");
   });
 
   it("preserves null and undefined leaf values verbatim", async () => {

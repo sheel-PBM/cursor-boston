@@ -14,6 +14,7 @@ import Link from "next/link";
 import Avatar from "@/components/Avatar";
 import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { lookupPublicDisplayNames } from "@/lib/public-profile-lookup";
 import type { PairSession, SessionNotes } from "@/lib/pair-programming/types";
 
 interface PublicUser {
@@ -63,15 +64,12 @@ export default function SessionDetailPage() {
         // Fetch other participant's profile
         const otherUserId = sessionData.participantIds.find((id) => id !== user.uid);
         if (otherUserId) {
-          const userDoc = await getDoc(doc(db, "users", otherUserId));
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            setOtherUser({
-              uid: otherUserId,
-              displayName: userData.displayName || null,
-              photoURL: userData.photoURL || null,
-            });
-          }
+          const names = await lookupPublicDisplayNames([otherUserId]);
+          setOtherUser(names[otherUserId] ?? {
+            uid: otherUserId,
+            displayName: null,
+            photoURL: null,
+          });
         }
 
         // Load user's notes if they exist
